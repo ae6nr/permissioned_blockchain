@@ -16,16 +16,13 @@ func main() {
 	flag.Parse()
 
 	if *test != "" {
-		if *test == "blockchain" {
-			BlockchainTest()
-		} else if *test == "identity" {
-			IdentityTest()
-		} else if *test == "block" {
-			BlockTest()
+		if *test == "transaction" {
+			TestTransaction()
 		}
 	} else {
 		if *id != "" {
-			LoadIdentity(*id)
+			id := LoadIdentity(*id)
+			GenesisBootstrap(id)
 		} else {
 			panic("no id specified")
 		}

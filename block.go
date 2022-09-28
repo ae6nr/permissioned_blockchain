@@ -15,133 +15,128 @@ import (
 	"crypto/x509"
 )
 
+// the block struct
 type block_t struct {
-	timestamp   []byte
-	prev_hash   []byte // hash of previous block
-	hash        []byte // hash of entire block, including signature
-	signed_hash []byte // hash corresponding to the signature
-	data        []byte // data included in block
-	validator   []byte // validator public key
-	signature   []byte // signature corresponding to validator's public key
+	timestamp        [TIMESTAMP_SIZE]byte
+	prev_hash        [HASH_SIZE]byte   // hash of previous block
+	hash             [HASH_SIZE]byte   // hash of entire block, including signature
+	signed_hash      [HASH_SIZE]byte   // hash corresponding to the signature
+	validator        [PUBKEY_SIZE]byte // validator public key
+	signature_length uint8             // length of signature (variable)
+	signature        []byte            // signature corresponding to validator's public key
+	tx               transaction_t     // data included in block
 }
 
-func (block *block_t) ComputeSignedHash() []byte {
-	hash := crypto.SHA256.New()
-	hash.Write(block.timestamp)
-	hash.Write(block.prev_hash)
-	hash.Write(block.validator)
-	hash.Write(block.data)
-	block.signed_hash = hash.Sum(nil)
-	return hash.Sum(nil)
-}
-
-func (block *block_t) ComputeBlockHash() []byte {
-	hash := crypto.SHA256.New()
-	// hash.Write(block.timestamp)
-	// hash.Write(block.prev_hash)
-	// hash.Write(block.validator)
-	// hash.Write(block.signature)
-	// hash.Write(block.data)
-	hash.Write(block.Marshal())
-	block.hash = hash.Sum(nil)
-	return block.hash
-}
-
-func (block *block_t) VerifySignature() (bool, error) {
-	genericPublicKey, _ := x509.ParsePKIXPublicKey(block.validator)
-	publicKey := genericPublicKey.(*ecdsa.PublicKey)
-	if !ecdsa.VerifyASN1(publicKey, block.ComputeSignedHash(), block.signature) {
-		return false, errors.New("invalid signature")
-	} else {
-		return true, nil
-	}
-}
-
-func (block *block_t) VerifyData() (bool, error) {
-	if len(block.data) >= 1024 {
-		return false, errors.New("block data too long")
+// create a new block
+func NewBlock(timestamp int64, prev_hash []byte, tx transaction_t, id identity_t) (block block_t, err error) {
+	binary.BigEndian.PutUint64(block.timestamp[:], uint64(timestamp))
+	n := copy(block.prev_hash[:], prev_hash)
+	if n != len(prev_hash) {
+		s := fmt.Sprintf("length of prev_hash (%d) was too long for block.validator (%d)", len(prev_hash), n)
+		return block, errors.New(s)
 	}
 
-	return true, nil
-}
-
-func (block *block_t) Verify() (bool, error) {
-	_, err := block.VerifyData()
-	if err != nil {
-		return false, err
+	block.tx = tx
+	pubbytes := id.GetPubBytes()
+	n = copy(block.validator[:], pubbytes)
+	if n != len(pubbytes) {
+		s := fmt.Sprintf("length of pubbytes (%d) was too long for block.validator (%d)", len(pubbytes), n)
+		return block, errors.New(s)
 	}
-
-	_, err = block.VerifySignature()
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-func NewBlock(timestamp int64, prev_hash []byte, data []byte, id identity_t) (block block_t) {
-	block.timestamp = make([]byte, 8)
-	binary.BigEndian.PutUint64(block.timestamp, uint64(timestamp))
-	block.prev_hash = prev_hash
-	block.data = data
-	block.validator = id.GetPubBytes()
 
 	sig, err := ecdsa.SignASN1(rand.Reader, id.prvKey, block.ComputeSignedHash())
 	if err != nil {
-		panic(err)
+		return block, err
 	}
 	block.signature = sig
+	block.signature_length = byte(len(block.signature))
 	block.ComputeBlockHash()
 
 	_, err = block.Verify()
 	if err != nil {
-		panic(err)
+		return block, err
 	}
 
-	return block
+	return block, nil
 }
 
-// produce the genesis block
-func Genesis() block_t {
-	var block block_t
-
-	block.timestamp = make([]byte, 8)
-	block.prev_hash = make([]byte, 32)
-
+// compute the hash that will be signed
+func (block *block_t) ComputeSignedHash() []byte {
 	hash := crypto.SHA256.New()
-	hash.Write([]byte("redd"))
-	block.data = hash.Sum(nil)
-
-	validator_bytes, err := hex.DecodeString("3076301006072a8648ce3d020106052b8104002203620004d985ce1893c962f0dfe389b6193e4149a54eca746f9c1ba1f56b1ed898009a4669520de0b5e53e91336115c668e304b6d6a9b1e98bee50c0b0f1cf80b13e0f554c9df3a51bbee2ab1f7c37f12d563d6fb174bd7315cfbac97c09ad47e852afc9")
-	if err != nil {
-		panic("err")
-	}
-	signature_bytes, err := hex.DecodeString("3066023100ba5b934c6a39d563eb3f61d6db09bed020e8e29e39519013ccdb67445cf51aba148a8f755705db649cee33c2efa134260231009cbe7264fbce3c794f46b0bb45b72eb32543f5acfb43f044422c1e4bbcfecd069b668b52b9818a1ff6afee99783e5a2b")
-	if err != nil {
-		panic("err")
-	}
-	block.validator = validator_bytes
-	block.signature = signature_bytes
-	block.ComputeBlockHash()
-	return block
+	hash.Write(block.timestamp[:])
+	hash.Write(block.prev_hash[:])
+	hash.Write(block.validator[:])
+	hash.Write(block.tx.Marshal())
+	copy(block.signed_hash[:], hash.Sum(nil))
+	return block.signed_hash[:]
 }
 
+// compute the block hash
+func (block *block_t) ComputeBlockHash() []byte {
+	hash := crypto.SHA256.New()
+	hash.Write(block.Marshal())
+	copy(block.hash[:], hash.Sum(nil))
+	return block.hash[:]
+}
+
+// verify the validity of a block
+// transaction portion must be less than TX_MAX_SIZE
+// also checks for a valid signature
+func (block *block_t) Verify() (bool, error) {
+
+	// verify data
+	if len(block.tx.Marshal()) >= int(TX_MAX_SIZE) {
+		return false, errors.New("block data too long")
+	}
+
+	// verify signature
+	genericPublicKey, err := x509.ParsePKIXPublicKey(block.validator[:])
+	if err != nil {
+		return false, err
+	}
+	publicKey := genericPublicKey.(*ecdsa.PublicKey)
+	if !ecdsa.VerifyASN1(publicKey, block.ComputeSignedHash(), block.signature) {
+		return false, errors.New("invalid signature")
+	}
+
+	// check if valid transaction type
+	if block.tx.txtype < Entry || block.tx.txtype > Permission {
+		return false, errors.New("invalid transaction type")
+	}
+
+	return true, nil
+}
+
+// returns the hash of the block
+func (block *block_t) GetHash() []byte {
+	return block.hash[:]
+}
+
+// returns the validator public key as a hex-encoded string
+func (block *block_t) GetValidatorString() string {
+	return hex.EncodeToString(block.validator[:])
+}
+
+// prints information about the block
 func (block *block_t) Print() {
 	fmt.Printf("Block %x\r\n", block.hash)
-	fmt.Printf("  timestamp: %x\r\n", block.timestamp)
+	fmt.Printf("  timestamp:  %x\r\n", block.timestamp)
 	fmt.Printf("  prev_hash:  %x\r\n", block.prev_hash)
-	fmt.Printf("  validator: %x\r\n", block.validator)
-	fmt.Printf("  signature: %x\r\n", block.signature)
-	fmt.Printf("  data:      %x\r\n", block.data)
+	fmt.Printf("  validator:  %x\r\n", block.validator)
+	fmt.Printf("  sig_length: %x\r\n", block.signature_length)
+	fmt.Printf("  signature:  %x\r\n", block.signature)
+	fmt.Printf("  data:       %x\r\n", block.tx.Marshal())
 }
 
+// creates a binary representation of the block's data
 func (block *block_t) Marshal() []byte {
 	var d []byte
-	d = append(d, block.timestamp...)
-	d = append(d, block.prev_hash...)
-	d = append(d, block.validator...)
-	d = append(d, block.signature...)
-	d = append(d, block.data...)
+	d = append(d, block.timestamp[:]...)
+	d = append(d, block.prev_hash[:]...)
+	d = append(d, block.validator[:]...)
+	d = append(d, block.signature_length)
+	d = append(d, block.signature[:]...)
+	d = append(d, block.tx.Marshal()...)
 	return d
 }
 
@@ -160,7 +155,7 @@ func (block *block_t) Save() (bool, error) {
 		return false, err
 	}
 
-	hashhex := hex.EncodeToString(block.hash)
+	hashhex := hex.EncodeToString(block.hash[:])
 	fname := path.Join("blocks", hashhex+".dat")
 	err = os.WriteFile(fname, block.Marshal(), 0777)
 	if err != nil {
@@ -170,20 +165,38 @@ func (block *block_t) Save() (bool, error) {
 	return true, nil
 }
 
-func BlockTest() {
-	id := LoadIdentity("main")
+func getBounds(offset int, length int) (int, int) {
+	return offset, offset + length
+}
 
-	block0 := Genesis()
-	block0.Print()
-	_, err := block0.Verify()
+// loads the block from a file
+func LoadBlock(hash []byte) (block block_t, err error) {
+
+	hashhex := hex.EncodeToString(hash)
+	fname := path.Join("blocks", hashhex+".dat")
+	data, err := os.ReadFile(fname)
 	if err != nil {
-		panic(err)
+		return block, err
 	}
 
-	block1 := NewBlock(GetCurrentTimestamp(), block0.hash, []byte("I added a block!"), id)
-	block1.Print()
+	var i, j int
+	i, j = getBounds(0, int(TIMESTAMP_SIZE))
+	copy(block.timestamp[:], data[i:j])
+	i, j = getBounds(j, int(HASH_SIZE))
+	copy(block.prev_hash[:], data[i:j])
+	i, j = getBounds(j, int(PUBKEY_SIZE))
+	copy(block.validator[:], data[i:j])
+	i, j = getBounds(j, 1)
+	block.signature_length = data[i]
+	i, j = getBounds(j, int(block.signature_length))
+	block.signature = data[i:j]
+	err = block.tx.Unmarshal(data[j:])
+	if err != nil {
+		return block, err
+	}
 
-	block2 := NewBlock(GetCurrentTimestamp(), block1.hash, []byte("Yet another block."), id)
-	block2.Print()
-
+	block.ComputeSignedHash()
+	block.ComputeBlockHash()
+	_, err = block.Verify()
+	return block, err
 }

@@ -153,20 +153,3 @@ func LoadIdentity(label string) (id identity_t) {
 	id.label = label
 	return id
 }
-
-func IdentityTest() {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := "Hello, world!"
-	hash := sha256.Sum256([]byte(msg))
-	sig, err := ecdsa.SignASN1(rand.Reader, privateKey, hash[:])
-	if err != nil {
-		panic(err)
-	}
-
-	valid := ecdsa.VerifyASN1(&privateKey.PublicKey, hash[:], sig)
-	fmt.Println("Signature verified:", valid)
-}
