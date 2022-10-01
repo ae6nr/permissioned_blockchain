@@ -110,7 +110,6 @@ func TestBlockchainDelegation(t *testing.T) {
 		t.Errorf("error appending second block to blockchain (%s)", err)
 	}
 
-	bc1.Print()
 }
 
 func TestBlockchainLoad(t *testing.T) {

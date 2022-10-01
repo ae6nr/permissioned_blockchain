@@ -15,6 +15,7 @@ func TestBlockCreation(t *testing.T) {
 	}
 
 	tx1 := NewTx_Entry([]byte("I added a block!"))
+
 	block1, err := NewBlock(GetCurrentTimestamp(), block0.hash[:], tx1, id)
 	if err != nil {
 		t.Errorf("verification failed (%s)", err)

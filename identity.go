@@ -75,16 +75,16 @@ func GenerateKeys(id string) {
 	}
 
 	// create keys directory if it doesn't exist
-	if _, err := os.Stat("keys"); os.IsNotExist(err) {
-		err := os.Mkdir("keys", os.ModeDir)
+	if _, err := os.Stat(KEYS_DIR); os.IsNotExist(err) {
+		err := os.Mkdir(KEYS_DIR, os.ModeDir)
 		if err != nil {
 			panic(err)
 		}
 	}
 
 	// check if keys already exist
-	fname_pub := path.Join("keys", id+"_pub.pem")
-	fname_prv := path.Join("keys", id+"_prv.pem")
+	fname_pub := path.Join(KEYS_DIR, id+"_pub.pem")
+	fname_prv := path.Join(KEYS_DIR, id+"_prv.pem")
 	if _, err := os.Stat(fname_pub); errors.Is(err, os.ErrNotExist) {
 		// good
 	} else {
@@ -115,8 +115,8 @@ func LoadIdentity(label string) (id identity_t) {
 	var err error
 
 	// get filenames to keys
-	fname_pub := path.Join("keys", label+"_pub.pem")
-	fname_prv := path.Join("keys", label+"_prv.pem")
+	fname_pub := path.Join(KEYS_DIR, label+"_pub.pem")
+	fname_prv := path.Join(KEYS_DIR, label+"_prv.pem")
 
 	// read files
 	encPub, err = os.ReadFile(fname_pub)

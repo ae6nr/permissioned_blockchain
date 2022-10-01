@@ -1,3 +1,3 @@
-module permissioned_chain
+module reddchain
 
 go 1.19

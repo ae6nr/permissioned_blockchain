@@ -143,8 +143,8 @@ func (block *block_t) Marshal() []byte {
 // save block to a file
 func (block *block_t) Save() (bool, error) {
 	// create blocks directory if it doesn't exist
-	if _, err := os.Stat("blocks"); os.IsNotExist(err) {
-		err := os.Mkdir("blocks", os.ModeDir)
+	if _, err := os.Stat(BLOCKS_DIR); os.IsNotExist(err) {
+		err := os.Mkdir(BLOCKS_DIR, os.ModeDir)
 		if err != nil {
 			return false, err
 		}
@@ -156,7 +156,7 @@ func (block *block_t) Save() (bool, error) {
 	}
 
 	hashhex := hex.EncodeToString(block.hash[:])
-	fname := path.Join("blocks", hashhex+".dat")
+	fname := path.Join(BLOCKS_DIR, hashhex+".dat")
 	err = os.WriteFile(fname, block.Marshal(), 0777)
 	if err != nil {
 		return false, err
@@ -169,15 +169,7 @@ func getBounds(offset int, length int) (int, int) {
 	return offset, offset + length
 }
 
-// loads the block from a file
-func LoadBlock(hash []byte) (block block_t, err error) {
-
-	hashhex := hex.EncodeToString(hash)
-	fname := path.Join("blocks", hashhex+".dat")
-	data, err := os.ReadFile(fname)
-	if err != nil {
-		return block, err
-	}
+func Unmarshal(data []byte) (block block_t, err error) {
 
 	var i, j int
 	i, j = getBounds(0, int(TIMESTAMP_SIZE))
@@ -199,4 +191,19 @@ func LoadBlock(hash []byte) (block block_t, err error) {
 	block.ComputeBlockHash()
 	_, err = block.Verify()
 	return block, err
+
+}
+
+// loads the block from a file
+func LoadBlock(hash []byte) (block block_t, err error) {
+
+	hashhex := hex.EncodeToString(hash)
+	fname := path.Join(BLOCKS_DIR, hashhex+".dat")
+	data, err := os.ReadFile(fname)
+	if err != nil {
+		return block, err
+	}
+
+	return Unmarshal(data)
+
 }

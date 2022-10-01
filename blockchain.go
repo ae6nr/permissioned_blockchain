@@ -134,8 +134,8 @@ func (bc *blockchain_t) Save() error {
 
 	bc.SaveBlocks() // to reconstruct chain later
 
-	if _, err := os.Stat("blockchains"); os.IsNotExist(err) {
-		err := os.Mkdir("blockchains", os.ModeDir)
+	if _, err := os.Stat(BLOCKCHAIN_DIR); os.IsNotExist(err) {
+		err := os.Mkdir(BLOCKCHAIN_DIR, os.ModeDir)
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ func (bc *blockchain_t) Save() error {
 		return err
 	}
 
-	fname := path.Join("blockchains", bc.label+".json")
+	fname := path.Join(BLOCKCHAIN_DIR, bc.label+".json")
 	return os.WriteFile(fname, data, 0777)
 
 }
@@ -172,7 +172,7 @@ func (bc *blockchain_t) Print() {
 // loads the a chain from a file
 func LoadChain(label string) (bc blockchain_t, err error) {
 
-	fname := path.Join("blockchains", label+".json")
+	fname := path.Join(BLOCKCHAIN_DIR, label+".json")
 	data, err := os.ReadFile(fname)
 	if err != nil {
 		return bc, err
